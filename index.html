@@ -5,139 +5,124 @@
 <title>Team Quiz</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 
+<!-- SheetJS Library to read Excel -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
+
 <style>
-body {
-  font-family: Arial;
-  background:#f3f6fb;
-  margin:0;
-  padding:0;
-}
+body { font-family: Arial; background:#f3f6fb; margin:0; }
 .container {
-  max-width: 720px;
-  margin: 20px auto;
-  background:#fff;
-  padding:20px;
-  border-radius:14px;
-  box-shadow:0 8px 18px rgba(0,0,0,.08);
+  max-width:720px; margin:20px auto; background:#fff;
+  padding:20px; border-radius:14px; box-shadow:0 8px 18px rgba(0,0,0,.08);
 }
-h1 { text-align:center; }
-button {
-  padding:10px 16px;
-  margin-top:10px;
-  border-radius:10px;
-  border:none;
-  cursor:pointer;
-  font-size:16px;
-}
-.primary { background:#4b73ff; color:#fff; }
-.option {
-  display:block;
-  padding:10px;
-  border:1px solid #ddd;
-  border-radius:10px;
-  margin:8px 0;
-  cursor:pointer;
-}
-.option.selected { border-color:#4b73ff; background:#eef2ff; }
-#quiz, #result { display:none; }
+h1{text-align:center;}
+button{padding:10px 16px; border-radius:10px; border:none; cursor:pointer; font-size:16px;}
+.primary{background:#4b73ff; color:#fff;}
+.option{display:block; padding:10px; border:1px solid #ddd; border-radius:10px; margin:8px 0; cursor:pointer;}
+.option.selected{border-color:#4b73ff; background:#eef2ff;}
+#quiz,#result,#loader{display:none;}
 </style>
 </head>
 
 <body>
 <div class="container">
 
-  <h1>Team Quiz</h1>
+<h1>Team Quiz</h1>
 
-  <!-- TEAM ENTRY -->
-  <div id="team">
-    <label>Enter Team Name</label><br>
-    <input id="teamName" style="padding:8px;width:100%;margin-top:6px;">
-    <button class="primary" onclick="startQuiz()">Start Quiz</button>
-  </div>
+<!-- Upload Excel -->
+<div id="upload">
+  <p><b>Upload Quiz Excel File (.xlsx)</b></p>
+  <input type="file" id="fileInput" accept=".xlsx" />
+  <br><br>
+  <label>Enter Team Name</label><br>
+  <input id="teamName" style="padding:8px;width:100%;margin-top:6px;">
+  <button class="primary" onclick="loadExcel()">Load & Start</button>
+</div>
 
-  <!-- QUIZ AREA -->
-  <div id="quiz">
-    <h3 id="qtext"></h3>
-    <div id="options"></div>
-    <button class="primary" onclick="nextQuestion()">Submit & Next</button>
-  </div>
+<div id="loader"><p>Loading quiz… please wait</p></div>
 
-  <!-- RESULT -->
-  <div id="result">
-    <h2>🎉 Quiz Completed</h2>
-    <p id="scoreText"></p>
-    <button onclick="location.reload()">Play Again</button>
-  </div>
+<!-- QUIZ -->
+<div id="quiz">
+  <h3 id="qtext"></h3>
+  <div id="options"></div>
+  <button class="primary" onclick="nextQuestion()">Submit & Next</button>
+</div>
+
+<!-- RESULT -->
+<div id="result">
+  <h2>🎉 Quiz Completed</h2>
+  <p id="scoreText"></p>
+  <button onclick="location.reload()">Play Again</button>
+</div>
 
 </div>
 
 <script>
-// 👇 Add / edit your quiz questions here
-const questions = [
-  {
-    q: "Which is the largest planet?",
-    options:["Earth","Jupiter","Mars","Venus"],
-    answer:1
-  },
-  {
-    q: "Who invented the light bulb?",
-    options:["Newton","Edison","Tesla","Einstein"],
-    answer:1
-  },
-  {
-    q: "Which gas do plants absorb?",
-    options:["Oxygen","Carbon Dioxide","Nitrogen","Helium"],
-    answer:1
-  }
-];
+let questions = [];
+let current = 0, score = 0, selected = null, team = "";
 
-let current = 0;
-let score = 0;
-let selected = null;
-let team = "";
-
-// start quiz
-function startQuiz(){
+// read excel + start quiz
+function loadExcel(){
+  const file = document.getElementById("fileInput").files[0];
   team = document.getElementById("teamName").value.trim();
+  if(!file){ alert("Please upload Excel file"); return; }
   if(!team){ alert("Please enter team name"); return; }
-  document.getElementById("team").style.display="none";
-  document.getElementById("quiz").style.display="block";
-  loadQuestion();
+
+  document.getElementById("upload").style.display="none";
+  document.getElementById("loader").style.display="block";
+
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    const data = new Uint8Array(e.target.result);
+    const wb = XLSX.read(data, {type:'array'});
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet);
+
+    questions = rows.map(r=>({
+      q: r.Question,
+      options: [r.Option1, r.Option2, r.Option3, r.Option4],
+      answer: Number(r.Answer)-1
+    })).filter(q=>q.q);
+
+    if(!questions.length){
+      alert("No questions found in Excel. Check column names.");
+      location.reload();
+      return;
+    }
+
+    document.getElementById("loader").style.display="none";
+    document.getElementById("quiz").style.display="block";
+    loadQuestion();
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 function loadQuestion(){
   selected = null;
   const q = questions[current];
-  document.getElementById("qtext").innerText =
-    `Q${current+1}. ${q.q}`;
+  document.getElementById("qtext").innerText = `Q${current+1}. ${q.q}`;
   const box = document.getElementById("options");
   box.innerHTML="";
   q.options.forEach((opt,i)=>{
-    const div = document.createElement("div");
+    const div=document.createElement("div");
     div.className="option";
     div.innerText=opt;
-    div.onclick = ()=>selectOption(div,i);
+    div.onclick=()=>selectOption(div,i);
     box.appendChild(div);
   });
 }
 
 function selectOption(el,i){
-  [...document.querySelectorAll(".option")]
-    .forEach(o=>o.classList.remove("selected"));
+  [...document.querySelectorAll(".option")].forEach(o=>o.classList.remove("selected"));
   el.classList.add("selected");
-  selected = i;
+  selected=i;
 }
 
 function nextQuestion(){
   if(selected===null){ alert("Please select an answer"); return; }
-  if(selected === questions[current].answer) score++;
-
+  if(selected===questions[current].answer) score++;
   current++;
-  if(current < questions.length){
-    loadQuestion();
-  } else {
-    endQuiz();
-  }
+  if(current<questions.length){ loadQuestion(); }
+  else{ endQuiz(); }
 }
 
 function endQuiz(){
